@@ -7,7 +7,7 @@ print(tf.config.list_physical_devices('GPU'))
 
 def create_dataset(triplet: Sequence[Tuple[str,str,str]]):
 
-    tf
+    tf.data.Dataset.from_tensor_slices(triplet)
     pass
 
 

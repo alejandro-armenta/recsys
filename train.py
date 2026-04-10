@@ -6,18 +6,19 @@ from absl import logging
 
 import tensorflow as tf
 
-import optax
-import flax
+#import optax
+#import flax
 
-from flax import linen as nn
-from flax.training import checkpoints
-from flax.training import train_state
+#from flax import linen as nn
+#from flax.training import checkpoints
+#from flax.training import train_state
 
 import jax
 import jax.numpy as knp
 
-
 import numpy as np
+
+import pin_util
 
 FLAGS = flags.FLAGS
 
@@ -51,10 +52,76 @@ _MODEL_NAME = flags.DEFINE_string(
 
 _RESTORE_CHECKPOINT = flags.DEFINE_bool("restore_checkpoint", False, "If true, restore.")
 
+def generate_triplets(scene_product: Sequence[Tuple[str,str]], num_neg: int)->Sequence[Tuple[str,str,str]]:
 
+    count = len(scene_product)
+    key = jax.random.PRNGKey(0)
 
+    test = []
+    train = []
 
-tf.config.set_visible_devices([], 'GPU')
+    for i in range(count):
+        scene, pos = scene_product[i]
+
+        is_test = i % 10 == 0
+
+        key,subkey=jax.random.split(key)
+
+        neg_indices =jax.random.randint(subkey, [num_neg], 0, count - 1)
+
+        for neg_idx in neg_indices:
+            _,neg = scene_product[neg_idx]
+            
+            if is_test:
+                test.append((scene,pos,neg))
+            else:
+                train.append((scene,pos,neg))
+
+    return train, test 
+
+def shuffle_array(key, x):
+    num = len(x)
+    #son indices a x
+    to_swap = jax.random.randint(key, [num], 0, num - 1)
+
+    return [x[i] for i in to_swap]
+    
+          
+def main(argv):
+    del argv
+
+    config = {
+        'learning_rate': _LEARNING_RATE.value,
+        'regularization': _REGULARIZATION.value,
+        'output_size': _OUTPUT_SIZE.value,
+    }
+
+    print(tf.config.list_physical_devices('GPU'))
+    print(jax.devices())
+
+    
+    #tf.config.set_visible_devices([], 'GPU')
+
+    tf.compat.v1.enable_eager_execution()
+
+    scene_product = pin_util.get_valid_scene_product(_IMAGE_DIRECTORY.value, _INPUT_FILE.value)
+
+    train,test=generate_triplets(scene_product, _NUM_NEG.value)
+
+    logging.info('Train triplets: %d', len(train))
+    logging.info('Test triplets: %d', len(test))
+
+    key = jax.random.PRNGKey(0)
+    train = shuffle_array(key, train)
+    test = shuffle_array(key, test)
+
+    print(type(train))
+
+    np.array(train)
+    
+
+if __name__ == "__main__":
+    app.run(main)
 
 
 

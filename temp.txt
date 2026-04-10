@@ -1,3 +1,5 @@
 scenes are the persons
 
 two neural networks
+
+tanto productos como escenas estan en artifacts!

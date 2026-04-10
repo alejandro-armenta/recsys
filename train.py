@@ -19,6 +19,8 @@ import jax.numpy as knp
 import numpy as np
 
 import pin_util
+import ip
+import models
 
 FLAGS = flags.FLAGS
 
@@ -112,13 +114,37 @@ def main(argv):
     logging.info('Test triplets: %d', len(test))
 
     key = jax.random.PRNGKey(0)
+
     train = shuffle_array(key, train)
     test = shuffle_array(key, test)
 
-    print(type(train))
+    #print(type(train))
 
-    np.array(train)
-    
+    train = np.array(train)
+    test = np.array(test)
+
+    train_ds = ip.create_dataset(train).repeat() 
+    train_ds = train_ds.batch(_BATCH_SIZE.value).prefetch(tf.data.AUTOTUNE)
+
+    test_ds = ip.create_dataset(test).repeat() 
+    test_ds = test_ds.batch(_BATCH_SIZE.value).prefetch(tf.data.AUTOTUNE)
+
+    stl=models.STLModel(outpu_size=config['output_size'])
+
+    key,subkey=jax.random.split(key)
+
+    train_it = train_ds.as_numpy_iterator()
+
+    #son las 3 fotos
+    x = next(train_it)
+    #entonces primero se llama setup y despues se llama call y se pasan los parametros x[0], x[1], x[2]
+
+    stl.init(subkey, x[0], x[1], x[2])
+
+
+
+    #print(ds.shape)
+
 
 if __name__ == "__main__":
     app.run(main)

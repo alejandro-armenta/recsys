@@ -3,3 +3,38 @@ scenes are the persons
 two neural networks
 
 tanto productos como escenas estan en artifacts!
+
+batch size height, width, channels
+
+16,2,2,128
+
+batch size channels
+
+16,128
+
+entra como 16 imagenes
+
+(16, 512, 512, 3)
+
+la mismas imagen se transformo en 16 canales mas chiquitos
+
+(16, 128, 128, 16)
+
+la mismas imagen se transformo en 16 canales mas chiquitos
+(16, 32, 32, 32)
+
+(16, 8, 8, 64)
+
+(16, 2, 2, 128)
+
+
+(16, 128) 128 valores por imagen es un mean de antes
+
+
+(16, 512, 512, 3)
+(16, 128, 128, 16)
+(16, 32, 32, 32)
+(16, 8, 8, 64)
+(16, 2, 2, 128)
+(16, 128)
+(16, 32)

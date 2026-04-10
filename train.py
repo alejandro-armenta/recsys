@@ -6,15 +6,15 @@ from absl import logging
 
 import tensorflow as tf
 
-#import optax
+import optax
 #import flax
 
-#from flax import linen as nn
+from flax import linen as nn
 #from flax.training import checkpoints
-#from flax.training import train_state
+from flax.training import train_state
 
 import jax
-import jax.numpy as knp
+import jax.numpy as jnp
 
 import numpy as np
 
@@ -87,7 +87,33 @@ def shuffle_array(key, x):
     to_swap = jax.random.randint(key, [num], 0, num - 1)
 
     return [x[i] for i in to_swap]
+
+def train_step(state, scene, pos_product, neg_product, regularization, batch_size):
+
+    def loss_fn(params):
+        #aqui tiene que estar mi modelo!
+        result, new_model_state = state.apply_fn(params, scene, pos_product, neg_product, True, mutable=['batch_stats'])
+
+        #la distancia no se cambia el score negativo siempre tiene que ser mayor al positivo!
+        #lo va a minimizar al margen!
+        #son batches 
+
+        triplet_loss = jnp.sum(nn.relu(1.0 + result[1] - result[0]))
+
+        reg_loss = 1
+
+        return (triplet_loss + regularization * reg_loss) / batch_size
+        
     
+    grad_fn = jax.value_and_grad(loss_fn)
+
+    #esta madre evalua y calcula grad!
+    loss, grads = grad_fn(state.params)
+
+    new_state = state.apply_gradients(grads=grads)
+
+    return new_state, loss
+
           
 def main(argv):
     del argv
@@ -129,7 +155,7 @@ def main(argv):
     test_ds = ip.create_dataset(test).repeat() 
     test_ds = test_ds.batch(_BATCH_SIZE.value).prefetch(tf.data.AUTOTUNE)
 
-    stl=models.STLModel(outpu_size=config['output_size'])
+    stl=models.STLModel(output_size=config['output_size'])
 
     key,subkey=jax.random.split(key)
 
@@ -139,8 +165,16 @@ def main(argv):
     x = next(train_it)
     #entonces primero se llama setup y despues se llama call y se pasan los parametros x[0], x[1], x[2]
 
-    stl.init(subkey, x[0], x[1], x[2])
+    #esto te pasa los parametros
+    params = stl.init(subkey, x[0], x[1], x[2])
 
+    print(params.keys())
+
+    tx = optax.adam(learning_rate=config['learning_rate'])
+    
+    train_state.TrainState.create(apply_fn=stl.apply, params=params, tx=tx)
+
+    jax.jit(train_step)
 
 
     #print(ds.shape)

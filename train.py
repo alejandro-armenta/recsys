@@ -94,17 +94,19 @@ def train_step(state, scene, pos_product, neg_product, regularization, batch_siz
         #aqui tiene que estar mi modelo!
         result, new_model_state = state.apply_fn(params, scene, pos_product, neg_product, True, mutable=['batch_stats'])
 
-        #la distancia no se cambia el score negativo siempre tiene que ser mayor al positivo!
-        #lo va a minimizar al margen!
-        #son batches 
-
         triplet_loss = jnp.sum(nn.relu(1.0 + result[1] - result[0]))
 
-        reg_loss = 1
+        def reg_fn(embedding):
+            return nn.relu(
+                jnp.sqrt(jnp.sum(jnp.square(embedding), axis=-1)) - 1
+                )
+            
+        reg_loss = reg_fn(result[2]) + reg_fn(result[3]) + reg_fn(result[4])
+
+        reg_loss = jnp.sum(reg_loss)
 
         return (triplet_loss + regularization * reg_loss) / batch_size
         
-    
     grad_fn = jax.value_and_grad(loss_fn)
 
     #esta madre evalua y calcula grad!
@@ -114,6 +116,27 @@ def train_step(state, scene, pos_product, neg_product, regularization, batch_siz
 
     return new_state, loss
 
+def eval_step(state, scene, pos_product, neg_product):
+    
+    def loss_fn(params):
+        #aqui tiene que estar mi modelo!
+        result, new_model_state = state.apply_fn(
+            params, 
+            scene, 
+            pos_product, 
+            neg_product, 
+            True, 
+            mutable=['batch_stats']
+            )
+
+        triplet_loss = jnp.sum(nn.relu(1.0 + result[1] - result[0]))
+
+        return triplet_loss
+    
+    loss = loss_fn(state.params)
+
+    return loss
+    
           
 def main(argv):
     del argv
@@ -136,6 +159,7 @@ def main(argv):
 
     train,test=generate_triplets(scene_product, _NUM_NEG.value)
 
+    num_test = len(test)
     logging.info('Train triplets: %d', len(train))
     logging.info('Test triplets: %d', len(test))
 
@@ -172,12 +196,28 @@ def main(argv):
 
     tx = optax.adam(learning_rate=config['learning_rate'])
     
-    train_state.TrainState.create(apply_fn=stl.apply, params=params, tx=tx)
+    state = train_state.TrainState.create(apply_fn=stl.apply, params=params, tx=tx)
 
-    jax.jit(train_step)
+    train_step_fn = jax.jit(train_step)
 
+    eval_step_fn = jax.jit(eval_step)
 
-    #print(ds.shape)
+    init_step = state.step
+    regularization = config['regularization']
+
+    batch_size = _BATCH_SIZE.value
+
+    eval_steps = int(num_test / batch_size)
+
+    #0,30000
+    for i in range(init_step, _MAX_STEPS.value + 1):
+        #este toma el que sigue
+        batch = next(train_it)
+
+        
+
+        pass
+
 
 
 if __name__ == "__main__":

@@ -1,3 +1,9 @@
+
+#import os
+#os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = ".80"
+#os.environ["XLA_FLAGS"] = "--xla_gpu_enable_command_buffer="
+#os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+
 from typing import Sequence, Tuple
 
 from absl import flags
@@ -7,10 +13,10 @@ from absl import logging
 import tensorflow as tf
 
 import optax
-#import flax
+import flax
 
 from flax import linen as nn
-#from flax.training import checkpoints
+from flax.training import checkpoints
 from flax.training import train_state
 
 import jax
@@ -18,9 +24,13 @@ import jax.numpy as jnp
 
 import numpy as np
 
+import wandb
+
 import pin_util
 import ip
 import models
+
+#from tqdm import tqdm
 
 FLAGS = flags.FLAGS
 
@@ -42,7 +52,7 @@ _LOG_EVERY_STEPS=flags.DEFINE_integer('log_every_steps', 100, 'Log every this st
 
 _EVAL_EVERY_STEPS = flags.DEFINE_integer("eval_every_steps", 2000, "Eval every this step.")
 
-_CHECKPOINT_EVERY_STEPS = flags.DEFINE_integer("checkpoint_every_steps", 100000, "Checkpoint every this step.")
+_CHECKPOINT_EVERY_STEPS = flags.DEFINE_integer("checkpoint_every_steps", 10, "Checkpoint every this step.")
 
 _MAX_STEPS = flags.DEFINE_integer("max_steps", 30000, "Max number of steps.")
 
@@ -147,6 +157,8 @@ def main(argv):
         'output_size': _OUTPUT_SIZE.value,
     }
 
+    run = wandb.init(config=config, project='recsys-pinterest')
+
     print(tf.config.list_physical_devices('GPU'))
     print(jax.devices())
 
@@ -179,11 +191,12 @@ def main(argv):
     test_ds = ip.create_dataset(test).repeat() 
     test_ds = test_ds.batch(_BATCH_SIZE.value).prefetch(tf.data.AUTOTUNE)
 
-    stl=models.STLModel(output_size=config['output_size'])
+    stl=models.STLModel(output_size=wandb.config.output_size)
 
     key,subkey=jax.random.split(key)
 
     train_it = train_ds.as_numpy_iterator()
+    test_it = test_ds.as_numpy_iterator()
 
     #son las 3 fotos
     x = next(train_it)
@@ -194,7 +207,7 @@ def main(argv):
 
     print(params.keys())
 
-    tx = optax.adam(learning_rate=config['learning_rate'])
+    tx = optax.adam(learning_rate=wandb.config.learning_rate)
     
     state = train_state.TrainState.create(apply_fn=stl.apply, params=params, tx=tx)
 
@@ -203,20 +216,69 @@ def main(argv):
     eval_step_fn = jax.jit(eval_step)
 
     init_step = state.step
-    regularization = config['regularization']
+    regularization = wandb.config.regularization
 
     batch_size = _BATCH_SIZE.value
 
     eval_steps = int(num_test / batch_size)
 
+    losses = []
     #0,30000
     for i in range(init_step, _MAX_STEPS.value + 1):
         #este toma el que sigue
         batch = next(train_it)
+        scene = batch[0]
+        pos_product = batch[1]
+        neg_product = batch[2]
 
+        metrics = {
+            'step' : state.step
+        }
+
+        state, loss = train_step_fn(state, scene, pos_product, neg_product, regularization, batch_size)
+
+        losses.append(loss)
+
+        if i % _EVAL_EVERY_STEPS.value == 0 and i > 0:
+            eval_loss = []
+            for j in range(eval_steps):
+                ebatch = next(test_it)
+                escene = ebatch[0]
+                epos_product = ebatch[1]
+                eneg_product = ebatch[2]
+
+                loss = eval_step_fn(state, escene, epos_product, eneg_product)
+
+                eval_loss.append(loss)
+            
+            eval_loss = jnp.mean(jnp.array(eval_loss)) / batch_size
+            metrics.update({'eval_loss':eval_loss})
+                
+            
+
+        if i % _LOG_EVERY_STEPS.value == 0 and i > 0:
+            mean_loss = jnp.mean(jnp.array(losses))
+            losses = []
+            metrics.update({'train_loss':mean_loss})
+            wandb.log(metrics)
+            logging.info(metrics)
+
+    logging.info("Saving as %s", _MODEL_NAME.value)
+
+    data = flax.serialization.to_bytes(state)
+
+    metadata = { "output_size" : wandb.config.output_size}
+    
+    artifact = wandb.Artifact(
+        name=_MODEL_NAME.value,
+        metadata=metadata,
+        type="model")
+    
+    with artifact.new_file("pinterest_stl.model", "wb") as f:
+        f.write(data)
+
+    run.log_artifact(artifact)
         
-
-        pass
 
 
 

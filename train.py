@@ -40,11 +40,11 @@ _IMAGE_DIRECTORY=flags.DEFINE_string('image_dir', 'artifacts/shop_the_look:v1', 
 
 _NUM_NEG=flags.DEFINE_integer('num_neg', 5, 'How many negatives per positive.')
 
-_LEARNING_RATE=flags.DEFINE_float('learning_rate', 1e-3, 'Learning rate.')
+_LEARNING_RATE=flags.DEFINE_float('learning_rate', 0.0001, 'Learning rate.')
 
-_REGULARIZATION=flags.DEFINE_float('regularization', 0.1, 'Regularization.')
+_REGULARIZATION=flags.DEFINE_float('regularization', 0.2, 'Regularization.')
 
-_OUTPUT_SIZE=flags.DEFINE_integer('output_size', 32, 'Size of output embedding.')
+_OUTPUT_SIZE=flags.DEFINE_integer('output_size', 92, 'Size of output embedding.')
 
 _BATCH_SIZE=flags.DEFINE_integer('batch_size', 16, 'Batch size.')
 

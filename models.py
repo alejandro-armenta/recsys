@@ -58,6 +58,12 @@ class STLModel(nn.Module):
 
         self.product_cnn = CNN(filters=default_filter, output_size=self.output_size)
     
+    def get_scene_embed(self, scene):
+        return self.scene_cnn(scene, False)
+
+    def get_product_embed(self, product):
+        return self.product_cnn(product, False)
+
     def __call__(self, scene, pos_product, neg_product, train:bool = True):
         #cada imagen se vuelve un embedding
         scene_embed = self.scene_cnn(scene, train)
